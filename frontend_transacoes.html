@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Financeiro</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="style/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+  <div class="menu-toggle" onclick="toggleSidebar()">❯</div>
+
+  <div class="sidebar" id="sidebar">
+    <h4 id="tituloLateral">Dashboard</h4>
+    <div class="mb-4">
+      <label class="form-label">Selecionar Tela</label>
+      <select id="checkboxtransacoes" class="form-select">
+        <option value="dashboard">Dashboard</option>
+        <option value="adicionarModal">Criar Transação</option>
+        <option value="analisarModal">Analisar Transação</option>
+        <option value="deletarModal">Excluir Transação</option>
+      </select>
+      <button class="btn btn-warning w-100 mt-3" onclick="trocarTela()">Selecionar</button>
+    </div>
+    <div>
+      <h4>Contato</h4>
+      <label class="form-label">Envie sua solicitação:</label>
+      <textarea id="mensagemContato" class="form-control mb-3" rows="5"></textarea>
+      <button class="btn btn-warning w-100" onclick="enviarMensagem()">Enviar</button>
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="top-header">
+      <div class="dashboard-title">Dashboard Financeiro</div>
+      <div class="logo-area">Fraud Detection</div>
+    </div>
+
+    <div id="dashboard">
+      <div class="row g-4">
+        <div class="col-md-4"><div class="metric-card"><div class="metric-title">Valor Total Transacionado</div><div class="metric-value">R$ 17.305</div></div></div>
+        <div class="col-md-4"><div class="metric-card"><div class="metric-title">Transações Fraudulentas</div><div class="metric-value metric-danger">2</div></div></div>
+        <div class="col-md-4"><div class="metric-card"><div class="metric-title">Maior Transação</div><div class="metric-value">R$ 8.015</div></div></div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-6">
+          <div class="chart-card">
+            <div class="chart-title">Transações por Categoria</div>
+            <canvas id="graficoCategorias"></canvas>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="chart-card">
+            <div class="chart-title">Fraudes vs Normais</div>
+            <canvas id="graficoFraudes"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="col-md-12">
+          <div class="chart-card">
+            <div class="chart-title">Evolução das Transações</div>
+            <canvas id="graficoLinha"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="adicionarModal" class="hidden">
+      <div class="section-card">
+        <h2 class="mb-4">Criar Transação</h2>
+        <p class="text-muted mb-3">Este formulário envia os campos exigidos pelo contrato de <code>POST /transacoes</code>.</p>
+        <div class="row g-3">
+          <div class="col-md-4"><input type="number" step="0.01" class="form-control campo-valor" placeholder="Valor"></div>
+          <div class="col-md-4"><input type="date" class="form-control campo-data"></div>
+          <div class="col-md-4"><input type="time" class="form-control campo-hora"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-diaSemana" placeholder="Dia da semana"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-categoria" placeholder="Categoria"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-conta" placeholder="Conta"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-cidade" placeholder="Cidade"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-estado" placeholder="Estado"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-pais" placeholder="País"></div>
+          <div class="col-md-4"><input type="number" step="any" class="form-control campo-latitude" placeholder="Latitude"></div>
+          <div class="col-md-4"><input type="number" step="any" class="form-control campo-longitude" placeholder="Longitude"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-tipoTransacao" placeholder="Tipo da transação"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-dispositivo" placeholder="Dispositivo"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-estabelecimento" placeholder="Estabelecimento"></div>
+          <div class="col-md-4"><input type="number" class="form-control campo-tentativas" placeholder="Tentativas"></div>
+          <div class="col-md-4"><input type="text" class="form-control campo-ipOrigem" placeholder="IP de origem"></div>
+        </div>
+        <div class="d-flex gap-2 mt-4">
+          <button class="btn btn-primary" onclick="analisarESalvar()">Analisar e salvar</button>
+          <button class="btn btn-outline-secondary" onclick="preencherExemplo()">Preencher exemplo</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="analisarModal" class="hidden">
+      <div class="section-card">
+        <h2 class="mb-4">Analisar Transação</h2>
+        <p class="text-muted mb-3">Este envio usa o contrato de <code>POST /analisar</code> sem persistir no banco.</p>
+        <div class="row g-3">
+          <div class="col-md-4"><input type="number" step="0.01" class="form-control analise-valor" placeholder="Valor"></div>
+          <div class="col-md-4"><input type="date" class="form-control analise-data"></div>
+          <div class="col-md-4"><input type="time" class="form-control analise-hora"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-conta" placeholder="Conta"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-pais" placeholder="País"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-tipoTransacao" placeholder="Tipo da transação"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-dispositivo" placeholder="Dispositivo"></div>
+          <div class="col-md-4"><input type="number" class="form-control analise-tentativas" placeholder="Tentativas"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-categoria" placeholder="Categoria"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-cidade" placeholder="Cidade"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-estado" placeholder="Estado"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-estabelecimento" placeholder="Estabelecimento"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-diaSemana" placeholder="Dia da semana"></div>
+          <div class="col-md-4"><input type="number" step="any" class="form-control analise-latitude" placeholder="Latitude"></div>
+          <div class="col-md-4"><input type="number" step="any" class="form-control analise-longitude" placeholder="Longitude"></div>
+          <div class="col-md-4"><input type="text" class="form-control analise-ipOrigem" placeholder="IP de origem"></div>
+        </div>
+        <button class="btn btn-primary mt-4" onclick="analisarTransacao()">Analisar</button>
+        <div id="resultadoAnalise" class="analysis-result hidden mt-4"></div>
+      </div>
+    </div>
+
+    <div id="deletarModal" class="hidden">
+      <div class="section-card">
+        <h2 class="mb-4">Excluir Transação</h2>
+        <input type="number" id="deleteId" class="form-control" placeholder="ID da Transação">
+        <button class="btn btn-danger mt-3" onclick="excluirTransacao()">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalConfirmacao" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Mensagem enviada</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">Recebemos sua solicitação.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script/script.js"></script>
+</body>
+</html>
