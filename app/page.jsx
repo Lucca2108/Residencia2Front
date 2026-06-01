@@ -7,6 +7,12 @@ Chart.register(...registerables);
 
 const API_BASE_URL = '/api/backend';
 
+const TRANSACTION_TYPES = ['debito', 'credito', 'pix', 'transferencia', 'saque', 'pagamento'];
+const COUNTRIES = ['Brasil', 'Argentina', 'Chile', 'Colombia', 'Estados Unidos', 'Mexico', 'Portugal', 'Espanha'];
+const CATEGORIES = ['alimentacao', 'saude', 'viagem', 'compras', 'servicos', 'assinaturas', 'educacao', 'outros'];
+const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const DEVICES = ['app_mobile', 'web', 'caixa_eletronico', 'terminal_fisico'];
+
 const FORM_FIELDS = [
   ['valor', 'number', 'Valor', '0.01'],
   ['data', 'date', 'Data'],
@@ -45,6 +51,24 @@ const ANALYSIS_FIELDS = [
   ['ip_origem', 'text', 'IP de origem'],
 ];
 
+const HISTORY_FILTER_FIELDS = [
+  ['fraude', 'select', 'Fraude'],
+  ['risco', 'select', 'Risco'],
+  ['decisao', 'select', 'Decisao'],
+  ['data_inicio', 'date', 'Data inicial'],
+  ['data_fim', 'date', 'Data final'],
+  ['valor_min', 'number', 'Valor minimo', '0.01'],
+  ['valor_max', 'number', 'Valor maximo', '0.01'],
+  ['pais', 'text', 'Pais'],
+  ['estado', 'text', 'Estado'],
+  ['cidade', 'text', 'Cidade'],
+  ['categoria', 'select', 'Categoria'],
+  ['tipo_transacao', 'select', 'Tipo da transacao'],
+  ['conta', 'text', 'Conta'],
+  ['ip_origem', 'text', 'IP de origem'],
+  ['dispositivo', 'select', 'Dispositivo'],
+];
+
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'adicionarModal', label: 'Criar Transação' },
@@ -72,6 +96,28 @@ function emptyForm() {
     ip_origem: '',
   };
 }
+
+function emptyHistoryFilters() {
+  return {
+    fraude: '',
+    risco: '',
+    decisao: '',
+    data_inicio: '',
+    data_fim: '',
+    valor_min: '',
+    valor_max: '',
+    pais: '',
+    estado: '',
+    cidade: '',
+    categoria: '',
+    tipo_transacao: '',
+    conta: '',
+    ip_origem: '',
+    dispositivo: '',
+  };
+}
+
+const REQUIRED_ANALYSIS_FIELDS = ['valor', 'data', 'hora', 'conta'];
 
 function toNumberOrUndefined(value) {
   if (value === '' || value === null || value === undefined) return undefined;
@@ -122,6 +168,30 @@ function renderMetricCard(title, value, foot, icon, variant = '') {
   );
 }
 
+function getRiskTone(risco, decisao) {
+  const text = `${risco ?? ''} ${decisao ?? ''}`.toLowerCase();
+  if (text.includes('alto') || text.includes('fraud')) return 'danger';
+  if (text.includes('medio') || text.includes('médio')) return 'warning';
+  return 'success';
+}
+
+function SelectField({ value, onChange, options, placeholder, className = 'form-control' }) {
+  return (
+    <select className={className} value={value} onChange={onChange}>
+      <option value="">{placeholder}</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function fieldLabel(label, required = false) {
+  return required ? `${label} (obrigatório)` : label;
+}
+
 export default function Home() {
   const [tela, setTela] = useState('dashboard');
   const [form, setForm] = useState(emptyForm());
@@ -129,6 +199,10 @@ export default function Home() {
   const [mensagem, setMensagem] = useState('');
   const [apiStatus, setApiStatus] = useState('Aguardando conexao com o backend');
   const [carregando, setCarregando] = useState(false);
+  const [histFilters, setHistFilters] = useState(emptyHistoryFilters());
+  const [historico, setHistorico] = useState([]);
+  const [historicoLoading, setHistoricoLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
   const [dashboard, setDashboard] = useState({
     categorias: [],
     valores: [],
@@ -147,6 +221,49 @@ export default function Home() {
 
   const chartData = useMemo(() => dashboard, [dashboard]);
   const isConnected = apiStatus.toLowerCase().includes('conectado');
+
+  async function apiRequest(path, options = {}) {
+    const resposta = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+
+    const text = await resposta.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+
+    if (!resposta.ok) {
+      const detalhe = typeof data === 'string' ? data : JSON.stringify(data);
+      throw new Error(detalhe || `Erro HTTP ${resposta.status}`);
+    }
+
+    return data;
+  }
+
+  async function carregarHistorico(filtros = histFilters) {
+    try {
+      setHistoricoLoading(true);
+      const params = new URLSearchParams();
+      Object.entries(filtros).forEach(([key, value]) => {
+        if (value !== '' && value !== null && value !== undefined) params.set(key, value);
+      });
+      const dados = await apiRequest(`/transacoes${params.toString() ? `?${params.toString()}` : ''}`);
+      setHistorico(Array.isArray(dados) ? dados : dados?.items || dados?.transacoes || []);
+    } catch (erro) {
+      setApiStatus(`Falha ao carregar historico: ${erro.message}`);
+    } finally {
+      setHistoricoLoading(false);
+    }
+  }
 
   useEffect(() => {
     async function carregarTransacoes() {
@@ -179,6 +296,12 @@ export default function Home() {
 
     carregarTransacoes();
   }, []);
+
+  useEffect(() => {
+    if (tela === 'historicoModal') {
+      carregarHistorico(histFilters);
+    }
+  }, [tela]);
 
   useEffect(() => {
     const categorias = document.getElementById('graficoCategorias');
@@ -221,20 +344,78 @@ export default function Home() {
   }, [chartData]);
 
   function atualizar(campo, valor) {
+    setFormErrors((atual) => {
+      if (!atual[campo]) return atual;
+      const next = { ...atual };
+      delete next[campo];
+      return next;
+    });
     setForm((atual) => ({ ...atual, [campo]: valor }));
   }
 
-  function renderFieldGrid(fields) {
+  function renderFieldGrid(fields, formState = form, updater = atualizar) {
     return fields.map(([key, type, placeholder, step]) => (
       <div className="col-md-4" key={key}>
-        <input
-          type={type}
-          step={step === 'any' ? 'any' : step === '0.01' ? '0.01' : undefined}
-          className="form-control"
+        {type === 'select' ? (
+          <SelectField
+            value={formState[key]}
+            placeholder={placeholder}
+            options={
+              key === 'tipo_transacao'
+                ? TRANSACTION_TYPES
+                : key === 'categoria'
+                  ? CATEGORIES
+                  : key === 'dia_semana'
+                    ? WEEKDAYS
+                    : key === 'dispositivo'
+                      ? DEVICES
+                      : ['sim', 'nao', 'baixo', 'medio', 'alto', 'normal', 'fraude', 'aprovado', 'negado']
+            }
+            onChange={(e) => updater(key, e.target.value)}
+          />
+        ) : (
+          <input
+            type={type}
+            step={step === 'any' ? 'any' : step === '0.01' ? '0.01' : undefined}
+          className={`form-control ${formErrors[key] ? 'is-invalid' : ''}`}
           placeholder={placeholder}
-          value={form[key]}
-          onChange={(e) => atualizar(key, e.target.value)}
+          value={formState[key]}
+          onChange={(e) => updater(key, e.target.value)}
         />
+      )}
+      {formErrors[key] ? <div className="invalid-feedback d-block">{formErrors[key]}</div> : null}
+      </div>
+    ));
+  }
+
+  function renderHistoryFieldGrid() {
+    return HISTORY_FILTER_FIELDS.map(([key, type, placeholder, step]) => (
+      <div className="col-md-4" key={key}>
+        {type === 'select' ? (
+          <SelectField
+            value={histFilters[key]}
+            placeholder={placeholder}
+            options={
+              key === 'tipo_transacao'
+                ? TRANSACTION_TYPES
+                : key === 'categoria'
+                  ? CATEGORIES
+                  : key === 'dispositivo'
+                    ? DEVICES
+                    : ['true', 'false', 'alto', 'medio', 'baixo', 'normal', 'fraude', 'aprovado', 'negado']
+            }
+            onChange={(e) => setHistFilters((atual) => ({ ...atual, [key]: e.target.value }))}
+          />
+        ) : (
+          <input
+            type={type}
+            step={step === 'any' ? 'any' : step === '0.01' ? '0.01' : undefined}
+            className="form-control"
+            placeholder={placeholder}
+            value={histFilters[key]}
+            onChange={(e) => setHistFilters((atual) => ({ ...atual, [key]: e.target.value }))}
+          />
+        )}
       </div>
     ));
   }
@@ -244,7 +425,7 @@ export default function Home() {
       valor: '120.5',
       data: '2026-05-18',
       hora: '14:30',
-      dia_semana: 'segunda-feira',
+      dia_semana: 'monday',
       categoria: 'alimentacao',
       conta: '12345-6',
       cidade: 'Fortaleza',
@@ -258,33 +439,6 @@ export default function Home() {
       tentativas: '1',
       ip_origem: '192.168.0.10',
     });
-  }
-
-  async function apiRequest(path, options = {}) {
-    const resposta = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-      },
-    });
-
-    const text = await resposta.text();
-    let data = null;
-    if (text) {
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-    }
-
-    if (!resposta.ok) {
-      const detalhe = typeof data === 'string' ? data : JSON.stringify(data);
-      throw new Error(detalhe || `Erro HTTP ${resposta.status}`);
-    }
-
-    return data;
   }
 
   async function analisarPayload(payload) {
@@ -317,8 +471,16 @@ export default function Home() {
 
   async function analisar() {
     try {
+      const payload = buildPayload(form);
+      const errors = validarFormularioAnalise(payload);
+      if (Object.keys(errors).length) {
+        setFormErrors(errors);
+        setApiStatus('Preencha os campos obrigatorios antes de analisar.');
+        return;
+      }
+
       setCarregando(true);
-      const dados = await analisarPayload(buildPayload(form));
+      const dados = await analisarPayload(payload);
       setAnalise(dados);
       setApiStatus('Analise concluida com sucesso. Nenhuma transacao foi gravada.');
     } catch (erro) {
@@ -348,13 +510,53 @@ export default function Home() {
     }
   }
 
+  function limparFormulario() {
+    setForm(emptyForm());
+    setAnalise(null);
+    setFormErrors({});
+    setApiStatus('Formulario limpo.');
+  }
+
+  function limparFiltrosHistorico() {
+    setHistFilters(emptyHistoryFilters());
+  }
+
+  function validarFormularioAnalise(payload) {
+    const errors = {};
+    REQUIRED_ANALYSIS_FIELDS.forEach((field) => {
+      const value = payload[field];
+      if (value === undefined || value === null || value === '') {
+        errors[field] = 'Campo obrigatório';
+      }
+    });
+    return errors;
+  }
+
+  function validarFormularioAnalise(payload) {
+    const errors = {};
+    REQUIRED_ANALYSIS_FIELDS.forEach((field) => {
+      const value = payload[field];
+      if (value === undefined || value === null || value === '') {
+        errors[field] = 'Campo obrigatório';
+      }
+    });
+
+    if (payload.estado && typeof payload.estado === 'string' && payload.estado.trim().length < 2) {
+      errors.estado = 'Informe um estado válido';
+    }
+
+    return errors;
+  }
+
   const secaoVisivel = (nome) => (tela === nome ? '' : 'hidden');
 
   return (
     <>
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">BB</div>
+          <div className="brand-mark brand-mark-image" aria-label="Banco do Brasil">
+            <img src="/BB-logo.jpg" alt="Banco do Brasil" />
+          </div>
           <div className="brand-copy">
             <strong>BB Fraud Detection</strong>
             <span>Financial Risk Analytics</span>
@@ -362,7 +564,7 @@ export default function Home() {
         </div>
 
         <div className="nav-list">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.concat([{ id: 'historicoModal', label: 'Historico' }]).map((item) => (
             <button
               key={item.id}
               type="button"
@@ -394,18 +596,8 @@ export default function Home() {
             </div>
             <div className="module-badge">Fraud Detection</div>
           </div>
-          <div className="api-badge">
-            <span className="api-dot" />
-            {apiStatus}
-          </div>
         </section>
-
-        <div className="dashboard-nav-row">
-          <div className={`mini-status ${isConnected ? 'is-online' : ''}`}>
-            {isConnected ? 'Sistema online' : 'Aguardando conexão'}
-          </div>
-          <div className="form-help">Banco de dados e detecção antifraude integrados à API</div>
-        </div>
+        <div className="form-help dashboard-hint">Banco de dados e detecção antifraude integrados à API</div>
 
         <section id="dashboard" className={secaoVisivel('dashboard')}>
           <div className="row g-4">
@@ -498,21 +690,138 @@ export default function Home() {
 
         <section className={secaoVisivel('analisarModal')}>
           <div className="section-card">
-            <h2 className="mb-4">Analisar Transação</h2>
-            <p className="text-muted mb-3">Este envio usa o contrato de <code>POST /analisar</code> sem persistir no banco.</p>
-            <div className="row g-3">{renderFieldGrid(ANALYSIS_FIELDS)}</div>
-            <button className="btn btn-primary mt-4" onClick={analisar} disabled={carregando}>
-              {carregando ? 'Analisando...' : 'Analisar'}
-            </button>
+            <div className="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+              <div>
+                <h2 className="mb-2">Analisar Transação</h2>
+                <p className="text-muted mb-0">Organize os dados por grupo para uma leitura mais clara e profissional.</p>
+              </div>
+              <div className="d-flex gap-2">
+                <button className="btn btn-outline-secondary btn-lg" onClick={limparFormulario}>Limpar Campos</button>
+                <button className="btn btn-primary btn-lg" onClick={analisar} disabled={carregando}>
+                  {carregando ? 'Analisando...' : 'Analisar Transação'}
+                </button>
+              </div>
+            </div>
+
+            <div className="analysis-card-grid">
+              <div className="analysis-group-card">
+                <div className="card-header-lite">
+                <h5>Dados da transação</h5>
+                <span>Campos principais para classificação</span>
+              </div>
+                <div className="row g-3">{renderFieldGrid([
+                  ['valor', 'number', fieldLabel('Valor', true), '0.01'],
+                  ['data', 'date', fieldLabel('Data', true)],
+                  ['hora', 'time', fieldLabel('Hora', true)],
+                  ['tipo_transacao', 'select', 'Tipo da transacao'],
+                  ['categoria', 'select', 'Categoria'],
+                  ['dia_semana', 'select', 'Dia da semana'],
+                ])}</div>
+              </div>
+
+              <div className="analysis-group-card">
+                <div className="card-header-lite">
+                  <h5>Dados da conta e localização</h5>
+                  <span>Contexto geográfico e cadastral</span>
+                </div>
+                <div className="row g-3">{renderFieldGrid([
+                  ['conta', 'text', fieldLabel('Conta', true)],
+                  ['pais', 'text', 'Pais'],
+                  ['cidade', 'text', 'Cidade'],
+                  ['estado', 'text', 'Estado'],
+                  ['latitude', 'number', 'Latitude', 'any'],
+                  ['longitude', 'number', 'Longitude', 'any'],
+                ])}</div>
+              </div>
+
+              <div className="analysis-group-card">
+                <div className="card-header-lite">
+                  <h5>Dados técnicos</h5>
+                  <span>Ambiente de acesso e rastreabilidade</span>
+                </div>
+                <div className="row g-3">{renderFieldGrid([
+                  ['dispositivo', 'select', 'Dispositivo'],
+                  ['ip_origem', 'text', 'IP de origem'],
+                  ['tentativas', 'number', 'Tentativas'],
+                  ['estabelecimento', 'text', 'Estabelecimento'],
+                ])}</div>
+              </div>
+            </div>
+
             {analise ? (
-              <div className="analysis-result mt-4">
-                <strong>Resultado da análise</strong><br />
-                Fraude: {analise.is_fraude ? 'sim' : 'não'}<br />
-                Risco: {analise.classificacao_risco ?? '-'}<br />
-                Decisão: {analise.decisao ?? '-'}<br />
-                Motivos: {(analise.motivos || []).length ? analise.motivos.join(', ') : 'nenhum'}
+              <div className={`analysis-result mt-4 analysis-result-${getRiskTone(analise.classificacao_risco, analise.decisao)}`}>
+                <strong>Resultado da análise</strong>
+                <div className="analysis-result-grid mt-3">
+                  <div><span>Status da transação</span><strong>{analise.is_fraude ? 'Fraude' : 'Normal'}</strong></div>
+                  <div><span>Nível de risco</span><strong>{analise.classificacao_risco ?? '-'}</strong></div>
+                  <div><span>Decisão</span><strong>{analise.decisao ?? '-'}</strong></div>
+                  <div><span>Motivos</span><strong>{(analise.motivos || []).length ? analise.motivos.join(', ') : 'nenhum'}</strong></div>
+                </div>
               </div>
             ) : null}
+          </div>
+        </section>
+
+        <section className={secaoVisivel('historicoModal')}>
+          <div className="section-card">
+            <div className="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+              <div>
+                <h2 className="mb-2">Histórico de Transações</h2>
+                <p className="text-muted mb-0">Use os filtros para refinar a listagem consumindo `GET /transacoes` com `URLSearchParams`.</p>
+              </div>
+              <div className="d-flex gap-2">
+                <button className="btn btn-outline-secondary btn-lg" onClick={limparFiltrosHistorico}>Limpar Filtros</button>
+                <button className="btn btn-primary btn-lg" onClick={() => carregarHistorico(histFilters)} disabled={historicoLoading}>
+                  {historicoLoading ? 'Carregando...' : 'Aplicar Filtros'}
+                </button>
+              </div>
+            </div>
+
+            <div className="analysis-group-card mb-4">
+              <div className="card-header-lite">
+                <h5>Filtros do histórico</h5>
+                <span>Filtro rápido por fraude, risco, datas e atributos da transação</span>
+              </div>
+              <div className="row g-3">{renderHistoryFieldGrid()}</div>
+            </div>
+
+            <div className="table-responsive history-table-wrap">
+              <table className="table align-middle history-table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Valor</th>
+                    <th>Conta</th>
+                    <th>Cidade</th>
+                    <th>Estado</th>
+                    <th>Risco</th>
+                    <th>Fraude</th>
+                    <th>Decisao</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historico.length ? historico.map((item, index) => {
+                    const riscoTone = getRiskTone(item.risco || item.classificacao_risco, item.decisao);
+                    return (
+                      <tr key={item.id ?? index}>
+                        <td>{item.data ?? '-'}</td>
+                        <td>{typeof item.valor === 'number' ? item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : item.valor ?? '-'}</td>
+                        <td>{item.conta ?? '-'}</td>
+                        <td>{item.cidade ?? '-'}</td>
+                        <td>{item.estado ?? '-'}</td>
+                        <td><span className={`status-pill status-${riscoTone}`}>{item.risco ?? item.classificacao_risco ?? '-'}</span></td>
+                        <td>{item.fraude === true || item.is_fraude === true ? 'Sim' : item.fraude === false || item.is_fraude === false ? 'Nao' : '-'}</td>
+                        <td>{item.decisao ?? '-'}</td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan="8" className="text-center py-5 text-muted">Nenhuma transacao encontrada.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
 
