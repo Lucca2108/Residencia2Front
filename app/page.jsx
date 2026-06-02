@@ -555,7 +555,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand-block">
           <div className="brand-mark brand-mark-image" aria-label="Banco do Brasil">
-            <img src="/BB-logo.jpg" alt="Banco do Brasil" />
+            <img height="70px" src="/BB-logo.jpg" alt="Banco do Brasil" />
           </div>
           <div className="brand-copy">
             <strong>BB Fraud Detection</strong>
