@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+const API_BASE_URL = '/api/backend';
+
 const MENU_ITEMS = [
   { label: 'Pix', icon: '▣' },
   { label: 'Cartões', icon: '▤' },
@@ -22,6 +24,8 @@ const MORE_ITEMS = [
 function MobileHome() {
   const [screen, setScreen] = useState('inicio');
   const [moreOpen, setMoreOpen] = useState(true);
+  const accountNumber = '12345-6';
+  const [travelStatus, setTravelStatus] = useState('');
   const [travelForm, setTravelForm] = useState({
     cidade_destino: '',
     estado_destino: '',
@@ -29,14 +33,13 @@ function MobileHome() {
     data_inicio: '',
     data_fim: '',
   });
-  const [travelStatus, setTravelStatus] = useState('Status do Agendamento...');
-
   function updateTravel(field, value) {
     setTravelForm((current) => ({ ...current, [field]: value }));
   }
 
   async function enviarViagem() {
     const bodyData = {
+      conta: accountNumber,
       cidade_destino: travelForm.cidade_destino,
       estado_destino: travelForm.estado_destino,
       pais_destino: travelForm.pais_destino,
@@ -45,15 +48,18 @@ function MobileHome() {
     };
 
     try {
-      const response = await fetch('/viagens', {
+      setTravelStatus('Enviando recurso para a API...');
+      const response = await fetch(`${API_BASE_URL}/viagens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyData),
       });
-      const data = await response.text();
-      setTravelStatus(data || 'Viagem enviada com sucesso.');
-    } catch {
-      setTravelStatus('Aviso de Viagem processado no Servidor (Mock).');
+      const text = await response.text();
+      if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+      setTravelStatus(text || 'Viagem criada com sucesso.');
+      setScreen('menu');
+    } catch (error) {
+      setTravelStatus(`Falha ao criar viagem: ${error.message}`);
     }
   }
 
@@ -87,7 +93,7 @@ function MobileHome() {
                 <div className="mobile-summary-top">
                   <div>
                     <div className="mobile-subtitle">Conta Corrente</div>
-                    <div className="mobile-branch">Ag. 1234-5 - Cc. 12345-6</div>
+                    <div className="mobile-branch">Ag. 1234-5 - Cc. {accountNumber}</div>
                   </div>
                   <div className="mobile-chevron">›</div>
                 </div>
@@ -246,7 +252,8 @@ function MobileHome() {
                   </div>
                 </div>
 
-                <textarea className="form-control mobile-status-box" rows="4" value={travelStatus} readOnly />
+                {travelStatus ? <div className="mobile-travel-status">{travelStatus}</div> : null}
+
                 <button type="button" className="btn btn-bb-yellow w-100 mt-3" onClick={enviarViagem}>
                   Abrir Recurso
                 </button>

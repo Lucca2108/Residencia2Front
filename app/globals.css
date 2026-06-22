@@ -850,6 +850,13 @@ code {
   padding: 16px 0 4px;
 }
 
+.mobile-travel-card .btn-bb-yellow {
+  display: block;
+  width: fit-content;
+  margin: 14px auto 0;
+  padding-inline: 22px;
+}
+
 .mobile-travel-card {
   background: #fff;
   border: 1px solid #dbe4f0;
@@ -880,6 +887,17 @@ code {
   margin: 0 0 16px;
   color: #64748b;
   font-size: 0.85rem;
+}
+
+.mobile-travel-status {
+  margin-top: 14px;
+  border: 1px solid #dbe4f0;
+  background: #f8fafc;
+  color: #1f2937;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  padding: 10px 12px;
+  border-radius: 10px;
 }
 
 .mobile-two-cols {
