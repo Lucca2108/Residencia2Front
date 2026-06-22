@@ -40,24 +40,6 @@ const FORM_FIELDS = [
   ['ip_origem', 'text', 'IP de origem'],
 ];
 
-const HISTORY_FILTER_FIELDS = [
-  ['fraude', 'select', 'Fraude'],
-  ['risco', 'select', 'Risco'],
-  ['decisao', 'select', 'Decisao'],
-  ['data_inicio', 'date', 'Data inicial'],
-  ['data_fim', 'date', 'Data final'],
-  ['valor_min', 'number', 'Valor minimo', '0.01'],
-  ['valor_max', 'number', 'Valor maximo', '0.01'],
-  ['pais', 'text', 'Pais'],
-  ['estado', 'text', 'Estado'],
-  ['cidade', 'text', 'Cidade'],
-  ['categoria', 'select', 'Categoria'],
-  ['tipo_transacao', 'select', 'Tipo da transacao'],
-  ['conta', 'text', 'Conta'],
-  ['ip_origem', 'text', 'IP de origem'],
-  ['dispositivo', 'select', 'Dispositivo'],
-];
-
 const ANALYSIS_GROUPS = [
   {
     title: 'Dados da transacao',
@@ -118,6 +100,7 @@ function emptyForm() {
 
 function emptyHistoryFilters() {
   return {
+    id: '',
     fraude: '',
     risco: '',
     decisao: '',
@@ -308,6 +291,11 @@ export default function Home() {
   const [historico, setHistorico] = useState([]);
   const [historicoLoading, setHistoricoLoading] = useState(false);
   const [historicoUrl, setHistoricoUrl] = useState('');
+  const [historicoResultado, setHistoricoResultado] = useState(null);
+  const [historicoBusca, setHistoricoBusca] = useState('');
+  const [historicoOrdenacao, setHistoricoOrdenacao] = useState({ key: 'data', direction: 'desc' });
+  const [historicoPagina, setHistoricoPagina] = useState(1);
+  const [historicoJsonAberto, setHistoricoJsonAberto] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [dashboard, setDashboard] = useState({
     categorias: [],
@@ -359,15 +347,29 @@ export default function Home() {
     try {
       setHistoricoLoading(true);
       const params = new URLSearchParams();
-      Object.entries(filtros).forEach(([key, value]) => {
-        if (value !== '' && value !== null && value !== undefined) params.set(key, value);
-      });
+      if (filtros.id !== '' && filtros.id !== null && filtros.id !== undefined) {
+        params.set('id', filtros.id);
+      }
+      if (filtros.conta !== '' && filtros.conta !== null && filtros.conta !== undefined) {
+        params.set('conta', filtros.conta);
+      }
       const query = params.toString();
       setHistoricoUrl(`${API_BASE_URL}/transacoes${query ? `?${query}` : ''}`);
       const dados = await apiRequest(`/transacoes${query ? `?${query}` : ''}`);
-      setHistorico(Array.isArray(dados) ? dados : dados?.items || dados?.transacoes || []);
+      const lista = Array.isArray(dados) ? dados : dados?.items || dados?.transacoes || [];
+      const idFiltro = `${filtros.id ?? ''}`.trim();
+      const contaFiltro = `${filtros.conta ?? ''}`.trim();
+      const listaFiltrada = idFiltro
+        ? lista.filter((item) => `${item?.id ?? ''}`.trim() === idFiltro)
+        : contaFiltro
+          ? lista.filter((item) => `${item?.conta ?? ''}`.trim() === contaFiltro)
+        : lista;
+      setHistorico(listaFiltrada);
+      setHistoricoResultado(dados);
+      setHistoricoPagina(1);
     } catch (erro) {
       setApiStatus(`Falha ao carregar historico: ${erro.message}`);
+      setHistoricoResultado({ erro: erro.message });
     } finally {
       setHistoricoLoading(false);
     }
@@ -497,37 +499,89 @@ export default function Home() {
   }
 
   function renderHistoryFieldGrid() {
-    return HISTORY_FILTER_FIELDS.map(([key, type, placeholder, step]) => (
-      <div className="field-cell" key={key}>
-        {type === 'select' ? (
-          <SelectField
-            className="form-select form-input"
-            value={histFilters[key]}
-            placeholder={placeholder}
-            options={
-              key === 'tipo_transacao'
-                ? TRANSACTION_TYPES
-                : key === 'categoria'
-                  ? CATEGORIES
-                  : key === 'dispositivo'
-                    ? DEVICES
-                    : ['true', 'false', 'alto', 'medio', 'baixo', 'normal', 'fraude', 'aprovado', 'negado']
-            }
-            onChange={(e) => setHistFilters((atual) => ({ ...atual, [key]: e.target.value }))}
-          />
-        ) : (
-          <input
-            type={type}
-            step={step === 'any' ? 'any' : step === '0.01' ? '0.01' : undefined}
-            className="form-control form-input"
-            placeholder={placeholder}
-            value={histFilters[key]}
-            onChange={(e) => setHistFilters((atual) => ({ ...atual, [key]: e.target.value }))}
-          />
-        )}
+    return (
+      <div className="field-cell">
+        <input
+          type="text"
+          className="form-control form-input"
+          placeholder="ID da transação"
+          value={histFilters.id}
+          onChange={(e) => setHistFilters((atual) => ({ ...atual, id: e.target.value }))}
+        />
+        <input
+          type="text"
+          className="form-control form-input mt-3"
+          placeholder="Conta"
+          value={histFilters.conta}
+          onChange={(e) => setHistFilters((atual) => ({ ...atual, conta: e.target.value }))}
+        />
       </div>
-    ));
+    );
   }
+
+  function formatMoney(value) {
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) return value ?? '-';
+    return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function formatDate(value) {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('pt-BR');
+  }
+
+  function normalizeText(value) {
+    return `${value ?? ''}`.toLowerCase();
+  }
+
+  function isFraudeValue(item) {
+    return item.fraude === true || item.is_fraude === true || normalizeText(item.fraude).includes('true') || normalizeText(item.classificacao_risco).includes('alto');
+  }
+
+  function sortHistoricoRows(rows) {
+    const { key, direction } = historicoOrdenacao;
+    const factor = direction === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = a?.[key];
+      const bv = b?.[key];
+      if (av === bv) return 0;
+      if (av === undefined || av === null) return 1 * factor;
+      if (bv === undefined || bv === null) return -1 * factor;
+      const an = Number(av);
+      const bn = Number(bv);
+      if (!Number.isNaN(an) && !Number.isNaN(bn)) return (an - bn) * factor;
+      return `${av}`.localeCompare(`${bv}`, 'pt-BR') * factor;
+    });
+  }
+
+  const historicoFiltrado = sortHistoricoRows(
+    historico.filter((item) => {
+      if (!historicoBusca.trim()) return true;
+      const search = normalizeText(historicoBusca);
+      return [
+        item.id,
+        item.conta,
+        item.valor,
+        item.data,
+        item.hora,
+        item.categoria,
+        item.cidade,
+        item.estado,
+        item.tipo_transacao,
+        item.dispositivo,
+        item.tentativas,
+      ]
+        .filter(Boolean)
+        .some((value) => normalizeText(value).includes(search));
+    })
+  );
+
+  const historicoPorPagina = 8;
+  const totalHistoricoPaginas = Math.max(1, Math.ceil(historicoFiltrado.length / historicoPorPagina));
+  const historicoPaginaAtual = Math.min(historicoPagina, totalHistoricoPaginas);
+  const historicoVisivel = historicoFiltrado.slice((historicoPaginaAtual - 1) * historicoPorPagina, historicoPaginaAtual * historicoPorPagina);
 
   function preencherExemplo() {
     setForm({
@@ -644,6 +698,9 @@ export default function Home() {
 
   function limparFiltrosHistorico() {
     setHistFilters(emptyHistoryFilters());
+    setHistoricoBusca('');
+    setHistoricoOrdenacao({ key: 'data', direction: 'desc' });
+    setHistoricoPagina(1);
   }
 
   function setScreen(nextScreen) {
@@ -862,7 +919,7 @@ export default function Home() {
             <div className="analysis-group-card mt-4">
               <div className="card-header-lite">
                 <h5>Historico filtrado</h5>
-                <span>Gere e consulte a URL real usada no GET</span>
+                <span>Filtre apenas pela conta e veja o retorno bruto da API</span>
               </div>
               <div className="action-row action-row-tight">
                 <button className="btn btn-outline-secondary btn-modern" onClick={limparFiltrosHistorico}>
@@ -871,9 +928,132 @@ export default function Home() {
                 <button className="btn btn-primary btn-modern" onClick={() => carregarHistorico(histFilters)} disabled={historicoLoading}>
                   {historicoLoading ? 'Carregando...' : 'Aplicar Filtros'}
                 </button>
+                <button className="btn btn-outline-secondary btn-modern" onClick={() => setHistoricoJsonAberto((open) => !open)} disabled={!historicoResultado}>
+                  Visualizar JSON
+                </button>
               </div>
-              {historicoUrl ? <div className="analysis-result mt-3">URL: {historicoUrl}</div> : null}
+              <div className="analysis-group-card mt-3">
+                <div className="card-header-lite">
+                  <h5>Busca local</h5>
+                  <span>Pesquise por qualquer coluna da tabela</span>
+                </div>
+                <input
+                  type="text"
+                  className="form-control form-input"
+                  placeholder="Buscar na tabela..."
+                  value={historicoBusca}
+                  onChange={(e) => {
+                    setHistoricoBusca(e.target.value);
+                    setHistoricoPagina(1);
+                  }}
+                />
+              </div>
               <div className="form-grid form-grid-compact mt-3">{renderHistoryFieldGrid()}</div>
+              <div className="table-responsive history-table-wrap mt-4">
+                <table className="table align-middle history-table">
+                  <thead>
+                    <tr>
+                      {[
+                        ['id', 'ID'],
+                        ['conta', 'Conta'],
+                        ['valor', 'Valor'],
+                        ['data', 'Data'],
+                        ['hora', 'Hora'],
+                        ['categoria', 'Categoria'],
+                        ['cidade', 'Cidade'],
+                        ['estado', 'Estado'],
+                        ['tipo_transacao', 'Tipo da Transação'],
+                        ['dispositivo', 'Dispositivo'],
+                        ['tentativas', 'Tentativas'],
+                        ['fraude', 'Status de Fraude'],
+                      ].map(([key, label]) => (
+                        <th key={key}>
+                          <button
+                            type="button"
+                            className="history-sort-btn"
+                            onClick={() =>
+                              setHistoricoOrdenacao((atual) => ({
+                                key,
+                                direction: atual.key === key && atual.direction === 'asc' ? 'desc' : 'asc',
+                              }))
+                            }
+                          >
+                            {label}
+                          </button>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historicoVisivel.length ? (
+                      historicoVisivel.map((item, index) => {
+                        const fraude = isFraudeValue(item);
+                        return (
+                          <tr key={item.id ?? index}>
+                            <td>{item.id ?? '-'}</td>
+                            <td>{item.conta ?? '-'}</td>
+                            <td>{formatMoney(item.valor)}</td>
+                            <td>{formatDate(item.data)}</td>
+                            <td>{item.hora ?? '-'}</td>
+                            <td>{item.categoria ?? '-'}</td>
+                            <td>{item.cidade ?? '-'}</td>
+                            <td>{item.estado ?? '-'}</td>
+                            <td>{item.tipo_transacao ?? '-'}</td>
+                            <td>{item.dispositivo ?? '-'}</td>
+                            <td>{item.tentativas ?? '-'}</td>
+                            <td>
+                              <span className={`status-pill ${fraude ? 'status-danger' : 'status-success'}`}>
+                                {fraude ? '🚨 Suspeita de Fraude' : '✅ Transação Normal'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="12" className="text-center py-5 text-muted">
+                          Nenhum registro encontrado para este filtro.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="history-footer-actions">
+                <div className="small text-muted">
+                  Mostrando {historicoVisivel.length} de {historicoFiltrado.length} registros
+                </div>
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-modern btn-sm"
+                    disabled={historicoPaginaAtual <= 1}
+                    onClick={() => setHistoricoPagina((page) => Math.max(1, page - 1))}
+                  >
+                    Anterior
+                  </button>
+                  <span className="pagination-indicator">
+                    Página {historicoPaginaAtual} de {totalHistoricoPaginas}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-modern btn-sm"
+                    disabled={historicoPaginaAtual >= totalHistoricoPaginas}
+                    onClick={() => setHistoricoPagina((page) => Math.min(totalHistoricoPaginas, page + 1))}
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+              {historicoJsonAberto && historicoResultado ? (
+                <div className="json-modal-card mt-3">
+                  <div className="card-header-lite">
+                    <h5>JSON original</h5>
+                    <span>Resposta bruta da API formatada</span>
+                  </div>
+                  <pre className="json-viewer">{JSON.stringify(historicoResultado, null, 2)}</pre>
+                </div>
+              ) : null}
             </div>
 
             {analise ? (

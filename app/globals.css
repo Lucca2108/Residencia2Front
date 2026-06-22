@@ -1178,10 +1178,13 @@ code {
   overflow: hidden;
   border: 1px solid var(--border);
   background: #fff;
+  max-height: 540px;
+  overflow: auto;
 }
 
 .history-table {
   margin-bottom: 0;
+  min-width: 1200px;
 }
 
 .history-table thead th {
@@ -1190,10 +1193,68 @@ code {
   font-size: 13px;
   letter-spacing: 0.02em;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  white-space: nowrap;
 }
 
 .history-table td {
   border-color: #edf2f8;
+  white-space: nowrap;
+}
+
+.history-table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.history-sort-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+}
+
+.history-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pagination-indicator {
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.json-modal-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  padding: 16px;
+}
+
+.json-viewer {
+  margin: 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: #0b1f44;
+  color: #dbeafe;
+  overflow: auto;
+  max-height: 380px;
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
 .btn-bb-blue {
