@@ -19,7 +19,6 @@ const NAV_ITEMS = [
   { id: 'adicionarModal', label: 'Criar Transacao', icon: '+' },
   { id: 'analisarModal', label: 'Analisar Transacao', icon: '↗' },
   { id: 'deletarModal', label: 'Excluir Transacao', icon: '×' },
-  { id: 'historicoModal', label: 'Historico', icon: '⌁' },
 ];
 
 const FORM_FIELDS = [
@@ -308,6 +307,7 @@ export default function Home() {
   const [histFilters, setHistFilters] = useState(emptyHistoryFilters());
   const [historico, setHistorico] = useState([]);
   const [historicoLoading, setHistoricoLoading] = useState(false);
+  const [historicoUrl, setHistoricoUrl] = useState('');
   const [formErrors, setFormErrors] = useState({});
   const [dashboard, setDashboard] = useState({
     categorias: [],
@@ -362,7 +362,9 @@ export default function Home() {
       Object.entries(filtros).forEach(([key, value]) => {
         if (value !== '' && value !== null && value !== undefined) params.set(key, value);
       });
-      const dados = await apiRequest(`/transacoes${params.toString() ? `?${params.toString()}` : ''}`);
+      const query = params.toString();
+      setHistoricoUrl(`${API_BASE_URL}/transacoes${query ? `?${query}` : ''}`);
+      const dados = await apiRequest(`/transacoes${query ? `?${query}` : ''}`);
       setHistorico(Array.isArray(dados) ? dados : dados?.items || dados?.transacoes || []);
     } catch (erro) {
       setApiStatus(`Falha ao carregar historico: ${erro.message}`);
@@ -462,6 +464,9 @@ export default function Home() {
     if (key === 'dia_semana') return WEEKDAYS;
     if (key === 'dispositivo') return DEVICES;
     if (key === 'pais') return COUNTRIES;
+    if (key === 'fraude') return ['true', 'false'];
+    if (key === 'risco') return ['baixo', 'medio', 'alto'];
+    if (key === 'decisao') return ['aprovado', 'negado', 'revisar'];
     return ['sim', 'nao', 'baixo', 'medio', 'alto', 'normal', 'fraude', 'aprovado', 'negado'];
   }
 
@@ -689,9 +694,11 @@ export default function Home() {
               className={`nav-item ${tela === item.id ? 'active' : ''}`}
               onClick={() => setTela(item.id)}
             >
-              <span className="nav-icon" aria-hidden="true">
-                {item.icon}
-              </span>
+              {item.icon ? (
+                <span className="nav-icon" aria-hidden="true">
+                  {item.icon}
+                </span>
+              ) : null}
               <span>{item.label}</span>
             </button>
           ))}
@@ -852,6 +859,23 @@ export default function Home() {
               ))}
             </div>
 
+            <div className="analysis-group-card mt-4">
+              <div className="card-header-lite">
+                <h5>Historico filtrado</h5>
+                <span>Gere e consulte a URL real usada no GET</span>
+              </div>
+              <div className="action-row action-row-tight">
+                <button className="btn btn-outline-secondary btn-modern" onClick={limparFiltrosHistorico}>
+                  Limpar Filtros
+                </button>
+                <button className="btn btn-primary btn-modern" onClick={() => carregarHistorico(histFilters)} disabled={historicoLoading}>
+                  {historicoLoading ? 'Carregando...' : 'Aplicar Filtros'}
+                </button>
+              </div>
+              {historicoUrl ? <div className="analysis-result mt-3">URL: {historicoUrl}</div> : null}
+              <div className="form-grid form-grid-compact mt-3">{renderHistoryFieldGrid()}</div>
+            </div>
+
             {analise ? (
               <div className={`analysis-result mt-4 analysis-result-${getRiskTone(analise.classificacao_risco, analise.decisao)}`}>
                 <strong>Resultado da analise</strong>
@@ -875,83 +899,6 @@ export default function Home() {
                 </div>
               </div>
             ) : null}
-          </div>
-        </section>
-
-        <section className={secaoVisivel('historicoModal')}>
-          <div className="section-card">
-            <div className="section-heading">
-              <div>
-                <h2 className="mb-2">Historico de Transacoes</h2>
-                <p className="text-muted mb-0">
-                  Use os filtros para refinar a listagem consumindo <code>GET /transacoes</code> com <code>URLSearchParams</code>.
-                </p>
-              </div>
-              <div className="action-row action-row-tight">
-                <button className="btn btn-outline-secondary btn-modern" onClick={limparFiltrosHistorico}>
-                  Limpar Filtros
-                </button>
-                <button className="btn btn-primary btn-modern" onClick={() => carregarHistorico(histFilters)} disabled={historicoLoading}>
-                  {historicoLoading ? 'Carregando...' : 'Aplicar Filtros'}
-                </button>
-              </div>
-            </div>
-
-            <div className="analysis-group-card mb-4">
-              <div className="card-header-lite">
-                <h5>Filtros do historico</h5>
-                <span>Filtro rapido por fraude, risco, datas e atributos da transacao</span>
-              </div>
-              <div className="form-grid form-grid-compact">{renderHistoryFieldGrid()}</div>
-            </div>
-
-            <div className="table-responsive history-table-wrap">
-              <table className="table align-middle history-table">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Valor</th>
-                    <th>Conta</th>
-                    <th>Cidade</th>
-                    <th>Estado</th>
-                    <th>Risco</th>
-                    <th>Fraude</th>
-                    <th>Decisao</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historico.length ? (
-                    historico.map((item, index) => {
-                      const riscoTone = getRiskTone(item.risco || item.classificacao_risco, item.decisao);
-                      return (
-                        <tr key={item.id ?? index}>
-                          <td>{item.data ?? '-'}</td>
-                          <td>
-                            {typeof item.valor === 'number'
-                              ? item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                              : item.valor ?? '-'}
-                          </td>
-                          <td>{item.conta ?? '-'}</td>
-                          <td>{item.cidade ?? '-'}</td>
-                          <td>{item.estado ?? '-'}</td>
-                          <td>
-                            <span className={`status-pill status-${riscoTone}`}>{item.risco ?? item.classificacao_risco ?? '-'}</span>
-                          </td>
-                          <td>{item.fraude === true || item.is_fraude === true ? 'Sim' : item.fraude === false || item.is_fraude === false ? 'Nao' : '-'}</td>
-                          <td>{item.decisao ?? '-'}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="8" className="text-center py-5 text-muted">
-                        Nenhuma transacao encontrada.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
           </div>
         </section>
 
